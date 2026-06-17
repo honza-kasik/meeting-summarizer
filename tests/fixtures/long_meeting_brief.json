@@ -1,0 +1,257 @@
+{
+  "meeting_overview": {
+    "total_meeting_minutes": 241.0,
+    "included_topic_count": 6,
+    "top_3_longest_topics": [
+      {
+        "order": 2,
+        "topic_hint": "průběh stavby, místní komunikace",
+        "time_minutes": 74.0,
+        "time_range": "36.0–110.0 min",
+        "discussion_intensity": "high"
+      },
+      {
+        "order": 4,
+        "topic_hint": "dotace a financování, školství",
+        "time_minutes": 51.0,
+        "time_range": "131.0–182.0 min",
+        "discussion_intensity": "high"
+      },
+      {
+        "order": 5,
+        "topic_hint": "majetek města",
+        "time_minutes": 33.0,
+        "time_range": "182.0–215.0 min",
+        "discussion_intensity": "medium"
+      }
+    ],
+    "procedural_share": 0.12,
+    "discussion_share": 0.79,
+    "meeting_character": "mixed_focus",
+    "dominant_topic_share": 0.31
+  },
+  "priority_topics": [
+    {
+      "order": 2,
+      "topic_hint": "průběh stavby, místní komunikace",
+      "time_minutes": 74.0,
+      "time_range": "36.0–110.0 min",
+      "topic_type": "discussion",
+      "discussion_intensity": "high",
+      "topic_summary_hint": "průběh stavby, místní komunikace; klíčová slova: stavba, silnice, Olomoucká, výkop, harmonogram; typy zmínek: concern, decision, explanation"
+    },
+    {
+      "order": 4,
+      "topic_hint": "dotace a financování, školství",
+      "time_minutes": 51.0,
+      "time_range": "131.0–182.0 min",
+      "topic_type": "discussion",
+      "discussion_intensity": "high",
+      "topic_summary_hint": "dotace a financování, školství; klíčová slova: škola, dotace, projekt, učebna, rozpočet; typy zmínek: decision, explanation"
+    },
+    {
+      "order": 5,
+      "topic_hint": "majetek města",
+      "time_minutes": 33.0,
+      "time_range": "182.0–215.0 min",
+      "topic_type": "discussion",
+      "discussion_intensity": "medium",
+      "topic_summary_hint": "majetek města; klíčová slova: pozemek, prodej, nájem, parcela, cena; typy zmínek: concern, decision"
+    }
+  ],
+  "topics": [
+    {
+      "order": 1,
+      "time_minutes": 18.0,
+      "time_range": "0.0–18.0 min",
+      "start_minute": 0.0,
+      "end_minute": 18.0,
+      "topic_type": "procedural",
+      "topic_hint": "postup orgánů města",
+      "speaker_count": 2,
+      "dominant_speaker_ratio": 0.84,
+      "keywords": ["program", "usnesení", "zápis", "ověřovatel"],
+      "segments_count": 2,
+      "discussion_intensity": "low",
+      "topic_summary_hint": "postup orgánů města; klíčová slova: program, usnesení, zápis, ověřovatel; typy zmínek: procedural",
+      "evidence": [
+        {
+          "text": "Zastupitelé schválili program jednání a ověřovatele zápisu bez připomínek.",
+          "time_range": "0.0–5.0 min",
+          "start_minute": 0.0,
+          "end_minute": 5.0,
+          "evidence_type": "procedural"
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "time_minutes": 74.0,
+      "time_range": "36.0–110.0 min",
+      "start_minute": 36.0,
+      "end_minute": 110.0,
+      "topic_type": "discussion",
+      "topic_hint": "průběh stavby, místní komunikace",
+      "speaker_count": 6,
+      "dominant_speaker_ratio": 0.38,
+      "keywords": ["stavba", "silnice", "Olomoucká", "výkop", "harmonogram", "obyvatel"],
+      "segments_count": 7,
+      "discussion_intensity": "high",
+      "topic_summary_hint": "průběh stavby, místní komunikace; klíčová slova: stavba, silnice, Olomoucká, výkop, harmonogram; typy zmínek: concern, decision, explanation",
+      "evidence": [
+        {
+          "text": "Nejdelší debata se vedla o rekonstrukci Olomoucké ulice, kde město řešilo harmonogram výkopů a dopady na objízdné trasy.",
+          "time_range": "36.0–41.0 min",
+          "start_minute": 36.0,
+          "end_minute": 41.0,
+          "evidence_type": "explanation"
+        },
+        {
+          "text": "Padly obavy, že se práce znovu posunou do letních měsíců a zkomplikují přístup k domům i školce.",
+          "time_range": "48.0–53.0 min",
+          "start_minute": 48.0,
+          "end_minute": 53.0,
+          "evidence_type": "concern"
+        },
+        {
+          "text": "Vedení města uvedlo, že zhotovitel má dodat upravený harmonogram do 15. května a následně zveřejnit přesný plán uzavírek.",
+          "time_range": "61.0–66.0 min",
+          "start_minute": 61.0,
+          "end_minute": 66.0,
+          "evidence_type": "decision"
+        },
+        {
+          "text": "Diskuze se vracela také k tomu, zda mají být v rozkopané části doplněna krátkodobá parkovací místa pro obyvatele.",
+          "time_range": "88.0–93.0 min",
+          "start_minute": 88.0,
+          "end_minute": 93.0,
+          "evidence_type": "discussion"
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "time_minutes": 21.0,
+      "time_range": "110.0–131.0 min",
+      "start_minute": 110.0,
+      "end_minute": 131.0,
+      "topic_type": "monologue",
+      "topic_hint": "kontrola a dohled",
+      "speaker_count": 2,
+      "dominant_speaker_ratio": 0.79,
+      "keywords": ["kontrola", "audit", "smlouva", "zakázka"],
+      "segments_count": 2,
+      "discussion_intensity": "medium",
+      "topic_summary_hint": "kontrola a dohled; klíčová slova: kontrola, audit, smlouva, zakázka; typy zmínek: explanation",
+      "evidence": [
+        {
+          "text": "Kontrolní výbor shrnul výsledky prověrky veřejných zakázek a upozornil na chybějící přílohy u části smluv.",
+          "time_range": "112.0–117.0 min",
+          "start_minute": 112.0,
+          "end_minute": 117.0,
+          "evidence_type": "explanation"
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "time_minutes": 51.0,
+      "time_range": "131.0–182.0 min",
+      "start_minute": 131.0,
+      "end_minute": 182.0,
+      "topic_type": "discussion",
+      "topic_hint": "dotace a financování, školství",
+      "speaker_count": 5,
+      "dominant_speaker_ratio": 0.44,
+      "keywords": ["škola", "dotace", "projekt", "učebna", "rozpočet", "energie"],
+      "segments_count": 5,
+      "discussion_intensity": "high",
+      "topic_summary_hint": "dotace a financování, školství; klíčová slova: škola, dotace, projekt, učebna, rozpočet; typy zmínek: decision, explanation",
+      "evidence": [
+        {
+          "text": "Zastupitelé schválili podání dotace na odborné učebny základní školy v předpokládané hodnotě 28 milionů korun.",
+          "time_range": "131.0–136.0 min",
+          "start_minute": 131.0,
+          "end_minute": 136.0,
+          "evidence_type": "decision"
+        },
+        {
+          "text": "Debata se soustředila na to, jak vysoké budou provozní náklady po dokončení projektu a zda město udrží spolufinancování i v příštím roce.",
+          "time_range": "145.0–150.0 min",
+          "start_minute": 145.0,
+          "end_minute": 150.0,
+          "evidence_type": "concern"
+        },
+        {
+          "text": "Vedení radnice vysvětlovalo, že energetické úspory mají část budoucích výdajů kompenzovat.",
+          "time_range": "160.0–165.0 min",
+          "start_minute": 160.0,
+          "end_minute": 165.0,
+          "evidence_type": "explanation"
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "time_minutes": 33.0,
+      "time_range": "182.0–215.0 min",
+      "start_minute": 182.0,
+      "end_minute": 215.0,
+      "topic_type": "discussion",
+      "topic_hint": "majetek města",
+      "speaker_count": 4,
+      "dominant_speaker_ratio": 0.58,
+      "keywords": ["pozemek", "prodej", "nájem", "parcela", "cena"],
+      "segments_count": 4,
+      "discussion_intensity": "medium",
+      "topic_summary_hint": "majetek města; klíčová slova: pozemek, prodej, nájem, parcela, cena; typy zmínek: concern, decision",
+      "evidence": [
+        {
+          "text": "Jednání se protáhlo u prodeje městského pozemku, kde část zastupitelů zpochybňovala cenu i podmínky budoucí výstavby.",
+          "time_range": "184.0–189.0 min",
+          "start_minute": 184.0,
+          "end_minute": 189.0,
+          "evidence_type": "concern"
+        },
+        {
+          "text": "Nakonec prošel kompromis s doplněním podmínky, že kupující předloží projekt a respektuje stávající příjezdovou cestu.",
+          "time_range": "205.0–210.0 min",
+          "start_minute": 205.0,
+          "end_minute": 210.0,
+          "evidence_type": "decision"
+        }
+      ]
+    },
+    {
+      "order": 6,
+      "time_minutes": 44.0,
+      "time_range": "215.0–259.0 min",
+      "start_minute": 215.0,
+      "end_minute": 259.0,
+      "topic_type": "discussion",
+      "topic_hint": "dopad na obyvatele, komunikace města s občany",
+      "speaker_count": 7,
+      "dominant_speaker_ratio": 0.27,
+      "keywords": ["obyvatel", "stížnost", "hluk", "parkování", "komunikace"],
+      "segments_count": 5,
+      "discussion_intensity": "high",
+      "topic_summary_hint": "dopad na obyvatele, komunikace města s občany; klíčová slova: obyvatel, stížnost, hluk, parkování, komunikace; typy zmínek: concern, explanation",
+      "evidence": [
+        {
+          "text": "V závěru se zastupitelé vraceli ke stížnostem obyvatel na hluk, parkování a pomalé odpovědi radnice.",
+          "time_range": "221.0–226.0 min",
+          "start_minute": 221.0,
+          "end_minute": 226.0,
+          "evidence_type": "concern"
+        },
+        {
+          "text": "Padl návrh zveřejňovat přehled rozpracovaných podnětů, aby bylo zřejmé, které požadavky město řeší a v jakém termínu.",
+          "time_range": "244.0–249.0 min",
+          "start_minute": 244.0,
+          "end_minute": 249.0,
+          "evidence_type": "explanation"
+        }
+      ]
+    }
+  ]
+}
