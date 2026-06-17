@@ -623,66 +623,239 @@ def _score_sentence(sentence, top_lemmas):
     return score
 
 
-def _extract_representative_sentences(segs, top_lemmas, topic_hint):
+def _seconds_to_minutes(seconds):
+    """Convert seconds to minutes rounded to one decimal place."""
+    return round(seconds / 60.0, 1)
+
+
+def _format_minute_range(start_seconds, end_seconds):
+    """Format topic time range for prompt-friendly output."""
+    return f"{_seconds_to_minutes(start_seconds):.1f}–{_seconds_to_minutes(end_seconds):.1f} min"
+
+
+def _classify_evidence_type(sentence):
+    """Classify sentence role with cheap deterministic heuristics."""
+    lowered = sentence.lower()
+
+    if any(token in lowered for token in [
+        "schvál", "souhlas", "odsouhlas", "usnesen", "pověř", "ulož",
+        "rozhod", "výběr", "vybrán", "odhlas"
+    ]):
+        return "decision"
+
+    if any(token in lowered for token in [
+        "obava", "problém", "stíž", "krit", "nesouhlas", "rizik",
+        "vadí", "upozorn", "otázk", "pochyb"
+    ]):
+        return "concern"
+
+    if any(token in lowered for token in [
+        "protože", "důvod", "znamen", "vysvětl", "kvůli", "aby",
+        "jde o", "zahrnuje", "počítá se"
+    ]):
+        return "explanation"
+
+    if any(token in lowered for token in [
+        "program", "zápis", "ověřovatel", "procedur", "hlasování",
+        "bod", "jednací", "navržený program"
+    ]):
+        return "procedural"
+
+    return "discussion"
+
+
+def _sentence_information_score(sentence):
+    """Detect concrete factual anchors such as numbers, places, or dates."""
+    score = 0.0
+
+    if re.search(r"\b\d+[.,]?\d*\b", sentence):
+        score += 1.2
+
+    if re.search(r"\b(Kč|korun|milion|mil\.|tisíc|procent|%)\b", sentence, re.IGNORECASE):
+        score += 1.0
+
+    if re.search(
+        r"\b\d{1,2}\.\s*\d{1,2}\.\s*\d{2,4}\b|\b(leden|únor|březen|duben|květen|červen|červenec|srpen|září|říjen|listopad|prosinec)\b",
+        sentence,
+        re.IGNORECASE
+    ):
+        score += 0.8
+
+    capitalized_tokens = re.findall(r"\b[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][a-záčďéěíňóřšťúůýž]+\b", sentence)
+    if len(capitalized_tokens) >= 2:
+        score += 0.8
+
+    if re.search(r"\b(v|ve|na|do|u)\s+[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ][a-záčďéěíňóřšťúůýž]+\b", sentence):
+        score += 0.6
+
+    return score
+
+
+def _collect_sentence_candidates(segs, top_lemmas, topic_hint):
+    """Build scored sentence candidates with metadata from topic segments."""
+    candidates = []
+
+    for seg in sorted(segs, key=lambda seg: seg.t_start):
+        ordered_texts = [seg.speaker_texts[speaker] for speaker in sorted(seg.speaker_texts)]
+        for text in ordered_texts:
+            for sentence in re.split(r'(?<=[.!?])\s+', text):
+                sentence = sentence.strip()
+                if len(sentence.split()) <= 8:
+                    continue
+
+                base_score = _score_sentence(sentence, top_lemmas)
+                if base_score <= 0:
+                    continue
+
+                info_score = _sentence_information_score(sentence)
+                evidence_type = _classify_evidence_type(sentence)
+                score = base_score + info_score
+
+                if topic_hint and sentence == _find_hint_sentence([sentence], topic_hint):
+                    score += 0.6
+
+                if evidence_type == "decision":
+                    score += 0.5
+                elif evidence_type in {"concern", "explanation"}:
+                    score += 0.25
+
+                candidates.append({
+                    "text": sentence,
+                    "score": round(score, 3),
+                    "evidence_type": evidence_type,
+                    "segment_id": int(seg.name),
+                    "start_minute": _seconds_to_minutes(seg.t_start),
+                    "end_minute": _seconds_to_minutes(seg.t_end),
+                    "time_range": _format_minute_range(seg.t_start, seg.t_end),
+                })
+
+    unique_candidates = []
+    seen_texts = set()
+    for candidate in candidates:
+        if candidate["text"] in seen_texts:
+            continue
+        seen_texts.add(candidate["text"])
+        unique_candidates.append(candidate)
+
+    return unique_candidates
+
+
+def _evidence_budget(time_minutes):
+    """Scale evidence count modestly with topic duration."""
+    if time_minutes >= 20:
+        return 5
+    if time_minutes >= 10:
+        return 4
+    return 3
+
+
+def _select_representative_evidence(candidates, topic_hint, evidence_budget):
     """
-    Extract representative sentences with scoring and diversity selection.
+    Select representative evidence with scoring and diversity selection.
 
-    Uses MMR-lite (Maximal Marginal Relevance) approach:
-    1. Scores sentences by topic keyword presence and length quality
-    2. Selects sentences that are both relevant and diverse
-    3. Prioritizes hint sentence if available
-
-    Ensures selected sentences aren't too similar (Jaccard < 0.5).
+    Priorities:
+    1. Keep a strong hint-matching sentence when available
+    2. Preserve concrete sentences with numbers, dates, places, or decisions
+    3. Spread evidence across different segments when possible
+    4. Avoid near-duplicate phrasing
 
     Args:
-        segs: List of segment rows from DataFrame
-        top_lemmas: Most important lemmas for this topic
+        candidates: Sentence candidate metadata
         topic_hint: Domain hint string (or empty)
+        evidence_budget: Maximum evidence items to keep
 
     Returns:
-        list[str]: Up to 3 representative sentences
+        list[dict]: Representative evidence objects
     """
-    # Collect all text
-    all_text = []
-    for seg in segs:
-        for text in seg.speaker_texts.values():
-            all_text.append(text)
-    all_text = " ".join(all_text)
+    if not candidates:
+        return []
 
-    # Split into sentences
-    sentences = re.split(r'(?<=[.!?])\s+', all_text)
+    selected = []
+    selected_texts = []
+    seen_segments = set()
 
-    # Deduplicate
-    sentences = list(dict.fromkeys(
-        s.strip() for s in sentences if len(s.split()) > 8
-    ))
-
-    # Score sentences
-    scored = [
-        (_score_sentence(s, top_lemmas), s)
-        for s in sentences
-        if _score_sentence(s, top_lemmas) > 0
-    ]
-    scored.sort(reverse=True)
-
-    # Select with diversity (MMR-lite)
-    representative_text = []
-
-    # Add mandatory hint sentence if available
+    sentences = [candidate["text"] for candidate in candidates]
     hint_sentence = _find_hint_sentence(sentences, topic_hint)
     if hint_sentence:
-        representative_text.append(hint_sentence)
+        for candidate in candidates:
+            if candidate["text"] == hint_sentence:
+                selected.append(candidate)
+                selected_texts.append(candidate["text"])
+                seen_segments.add(candidate["segment_id"])
+                break
 
-    # Add remaining sentences with diversity
-    for _, s in scored:
-        if len(representative_text) >= 3:
-            break
-        if s in representative_text:
-            continue
-        if all(_jaccard_similarity(s, prev) < 0.5 for prev in representative_text):
-            representative_text.append(s)
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: (
+            -candidate["score"],
+            candidate["start_minute"],
+            candidate["segment_id"],
+            candidate["text"]
+        )
+    )
 
-    return representative_text
+    for prefer_new_segment in (True, False):
+        for candidate in ranked:
+            if len(selected) >= evidence_budget:
+                break
+            if candidate["text"] in selected_texts:
+                continue
+            if prefer_new_segment and candidate["segment_id"] in seen_segments:
+                continue
+            if any(_jaccard_similarity(candidate["text"], prev) >= 0.5 for prev in selected_texts):
+                continue
+
+            selected.append(candidate)
+            selected_texts.append(candidate["text"])
+            seen_segments.add(candidate["segment_id"])
+
+    return [
+        {
+            "text": candidate["text"],
+            "time_range": candidate["time_range"],
+            "start_minute": candidate["start_minute"],
+            "end_minute": candidate["end_minute"],
+            "evidence_type": candidate["evidence_type"],
+        }
+        for candidate in selected
+    ]
+
+
+def _derive_discussion_intensity(time_minutes, speaker_stats, segments_count):
+    """Derive a lightweight discussion-intensity signal."""
+    if (
+        time_minutes >= 18
+        or (speaker_stats["speaker_count"] >= 4 and speaker_stats["dominant_ratio"] < 0.6)
+        or segments_count >= 5
+    ):
+        return "high"
+
+    if (
+        time_minutes >= 8
+        or speaker_stats["speaker_count"] >= 3
+        or speaker_stats["dominant_ratio"] < 0.75
+        or segments_count >= 3
+    ):
+        return "medium"
+
+    return "low"
+
+
+def _build_topic_summary_hint(topic_hint, top_lemmas, evidence):
+    """Build a short deterministic hint for the article prompt."""
+    hint_parts = []
+
+    if topic_hint:
+        hint_parts.append(topic_hint)
+
+    if top_lemmas:
+        hint_parts.append(f"klíčová slova: {', '.join(top_lemmas[:5])}")
+
+    evidence_types = sorted({item["evidence_type"] for item in evidence})
+    if evidence_types:
+        hint_parts.append(f"typy zmínek: {', '.join(evidence_types)}")
+
+    return "; ".join(hint_parts)
 
 
 def summarize_topics(segments: pd.DataFrame, labels, lemma_maps):
@@ -709,7 +882,23 @@ def summarize_topics(segments: pd.DataFrame, labels, lemma_maps):
         speaker_stats = _analyze_speakers(segs)
         topic_type = _determine_topic_type(speaker_stats)
         topic_hint = _generate_topic_hint(top_lemmas)
-        representative_text = _extract_representative_sentences(segs, top_lemmas, topic_hint)
+        evidence_candidates = _collect_sentence_candidates(segs, top_lemmas, topic_hint)
+        evidence_budget = _evidence_budget(time_minutes)
+        representative_evidence = _select_representative_evidence(
+            evidence_candidates,
+            topic_hint,
+            evidence_budget
+        )
+        discussion_intensity = _derive_discussion_intensity(
+            time_minutes,
+            speaker_stats,
+            len(idxs)
+        )
+        topic_summary_hint = _build_topic_summary_hint(
+            topic_hint,
+            top_lemmas,
+            representative_evidence
+        )
 
         # Build final summary object
         summaries.append({
@@ -718,11 +907,19 @@ def summarize_topics(segments: pd.DataFrame, labels, lemma_maps):
             "segments_count": len(idxs),
             "segments": [_segment_to_json(segments.iloc[i]) for i in idxs],
             "speakers": sorted(speaker_stats["speaker_words"].keys()),
+            "speaker_count": speaker_stats["speaker_count"],
+            "dominant_speaker_ratio": round(speaker_stats["dominant_ratio"], 2),
+            "start_minute": _seconds_to_minutes(t_start),
+            "end_minute": _seconds_to_minutes(t_end),
+            "time_range": _format_minute_range(t_start, t_end),
             "time_minutes": time_minutes,
             "topic_type": topic_type,
             "topic_hint": topic_hint,
             "top_lemmas": top_lemmas,
-            "representative_text": representative_text
+            "discussion_intensity": discussion_intensity,
+            "topic_summary_hint": topic_summary_hint,
+            "representative_evidence": representative_evidence,
+            "representative_text": [item["text"] for item in representative_evidence]
         })
 
     # Sort by time spent (most to least)
@@ -733,58 +930,139 @@ def build_llm_query_payload(
     topics,
     min_minutes=2.0,
     max_topics=12,
-    max_evidence_per_topic=3):
+    max_priority_topics=3):
     """
     Prepare structured input for LLM from topic summaries.
 
-    Filters and formats topics to create concise, focused LLM input:
+    Filters and formats topics into a deterministic article brief:
     1. Removes short/insignificant topics (< min_minutes)
-    2. Sorts topics by time spent (importance indicator)
-    3. Limits number of topics and evidence sentences
+    2. Limits total topic count
+    3. Keeps topic list in reading order (chronological)
+    4. Adds meeting-level context and priority topics
 
-    This creates a dense, structured prompt that gives the LLM just enough
-    information to write a good article without overwhelming it.
+    This creates a dense article brief that gives the LLM enough concrete
+    material to write readable coverage without inventing detail.
 
     Args:
         topics: List of topic dicts from summarize_topics()
         min_minutes: Minimum topic duration to include (default: 2.0)
         max_topics: Maximum number of topics to include (default: 12)
-        max_evidence_per_topic: Max representative sentences per topic (default: 3)
+        max_priority_topics: Maximum priority topics for lead guidance
 
     Returns:
-        list[dict]: Filtered topics with structure:
-            - order: ranking by importance (int)
-            - time_minutes: duration spent on topic (float)
-            - topic_type: "monologue", "discussion", or "procedural" (str)
-            - topic_hint: domain hint for topic (str)
-            - evidence: list of representative sentences (list[str])
+        dict: Deterministic article brief with meeting overview and topics
     """
 
-    # Filter out short topics
     filtered = [
         t for t in topics
         if t.get("time_minutes", 0) >= min_minutes
     ]
 
-    # Sort by time spent (longer = more important)
-    filtered.sort(key=lambda t: -t["time_minutes"])
+    ranked_topics = sorted(
+        filtered,
+        key=lambda topic: (
+            -topic["time_minutes"],
+            -len(topic.get("representative_evidence", [])),
+            topic.get("start_minute", 0),
+            topic.get("topic_id", 0)
+        )
+    )
+    filtered = ranked_topics[:max_topics]
 
-    # Limit to top N topics
-    filtered = filtered[:max_topics]
+    chronological_topics = sorted(
+        filtered,
+        key=lambda topic: (
+            topic.get("start_minute", 0),
+            topic.get("end_minute", 0),
+            topic.get("topic_id", 0)
+        )
+    )
 
-    # Format for LLM
     llm_topics = []
-
-    for i, t in enumerate(filtered):
+    for i, topic in enumerate(chronological_topics):
+        evidence_budget = _evidence_budget(topic["time_minutes"])
+        evidence = topic.get("representative_evidence", [])[:evidence_budget]
         llm_topics.append({
             "order": i + 1,
-            "time_minutes": round(t["time_minutes"], 1),
-            "topic_type": t["topic_type"],
-            "topic_hint": t["topic_hint"],
-            "evidence": t["representative_text"][:max_evidence_per_topic]
+            "time_minutes": round(topic["time_minutes"], 1),
+            "time_range": topic.get("time_range"),
+            "start_minute": topic.get("start_minute"),
+            "end_minute": topic.get("end_minute"),
+            "topic_type": topic.get("topic_type"),
+            "topic_hint": topic.get("topic_hint"),
+            "speaker_count": topic.get("speaker_count"),
+            "dominant_speaker_ratio": topic.get("dominant_speaker_ratio"),
+            "keywords": topic.get("top_lemmas", [])[:6],
+            "segments_count": topic.get("segments_count"),
+            "discussion_intensity": topic.get("discussion_intensity"),
+            "topic_summary_hint": topic.get("topic_summary_hint"),
+            "evidence": evidence,
         })
 
-    return llm_topics
+    total_minutes = round(sum(topic["time_minutes"] for topic in llm_topics), 1)
+    procedural_minutes = round(
+        sum(topic["time_minutes"] for topic in llm_topics if topic["topic_type"] == "procedural"),
+        1
+    )
+    discussion_minutes = round(
+        sum(
+            topic["time_minutes"]
+            for topic in llm_topics
+            if topic["topic_type"] == "discussion" or topic["discussion_intensity"] == "high"
+        ),
+        1
+    )
+
+    longest_topics = sorted(
+        llm_topics,
+        key=lambda topic: (-topic["time_minutes"], topic["order"])
+    )[:max_priority_topics]
+
+    dominant_share = round(
+        longest_topics[0]["time_minutes"] / total_minutes,
+        2
+    ) if total_minutes and longest_topics else 0.0
+
+    if dominant_share >= 0.45:
+        meeting_character = "dominated_by_one_topic"
+    elif len(llm_topics) >= 6 and dominant_share <= 0.25:
+        meeting_character = "spread_across_many_topics"
+    else:
+        meeting_character = "mixed_focus"
+
+    return {
+        "meeting_overview": {
+            "total_meeting_minutes": total_minutes,
+            "included_topic_count": len(llm_topics),
+            "top_3_longest_topics": [
+                {
+                    "order": topic["order"],
+                    "topic_hint": topic["topic_hint"],
+                    "time_minutes": topic["time_minutes"],
+                    "time_range": topic["time_range"],
+                    "discussion_intensity": topic["discussion_intensity"],
+                }
+                for topic in longest_topics
+            ],
+            "procedural_share": round((procedural_minutes / total_minutes), 2) if total_minutes else 0.0,
+            "discussion_share": round((discussion_minutes / total_minutes), 2) if total_minutes else 0.0,
+            "meeting_character": meeting_character,
+            "dominant_topic_share": dominant_share,
+        },
+        "priority_topics": [
+            {
+                "order": topic["order"],
+                "topic_hint": topic["topic_hint"],
+                "time_minutes": topic["time_minutes"],
+                "time_range": topic["time_range"],
+                "topic_type": topic["topic_type"],
+                "discussion_intensity": topic["discussion_intensity"],
+                "topic_summary_hint": topic["topic_summary_hint"],
+            }
+            for topic in longest_topics
+        ],
+        "topics": llm_topics,
+    }
 
 
 # =========================
@@ -868,8 +1146,7 @@ def main():
     llm_payload = build_llm_query_payload(
         topics,
         min_minutes=3.0,
-        max_topics=10,
-        max_evidence_per_topic=3
+        max_topics=10
     )
 
     Path(args.outdir / "llm_input.json").write_text(

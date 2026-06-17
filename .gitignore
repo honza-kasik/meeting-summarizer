@@ -1,3 +1,11 @@
 */.env
+.env
+.codex
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.mp4
+*.webm
 input/
 output/

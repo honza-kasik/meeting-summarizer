@@ -96,74 +96,167 @@ def build_meeting_metadata(topics, meeting_date, meeting_number, layout=DEFAULT_
 # TOPIC PREPARATION
 # =========================
 
-def prepare_topics_for_llm(topics, max_evidence=3):
-    """
-    Prepare topics for LLM consumption.
+def _derive_meeting_character(topics):
+    """Derive a simple meeting character label for legacy topic lists."""
+    if not topics:
+        return "mixed_focus"
 
-    Ensures deterministic, sorted, limited input to LLM.
+    ordered = sorted(topics, key=lambda topic: -topic.get("time_minutes", 0))
+    total_minutes = sum(topic.get("time_minutes", 0) for topic in ordered)
+    dominant_share = (
+        ordered[0].get("time_minutes", 0) / total_minutes
+        if total_minutes else 0.0
+    )
+
+    if dominant_share >= 0.45:
+        return "dominated_by_one_topic"
+    if len(ordered) >= 6 and dominant_share <= 0.25:
+        return "spread_across_many_topics"
+    return "mixed_focus"
+
+
+def prepare_topics_for_llm(topics_or_brief):
+    """
+    Normalize analyzer output into a prompt-ready article brief.
+
+    Supports both the new article-brief structure and the older plain topic list
+    for backwards compatibility.
 
     Args:
-        topics: List of topic dicts from analyzer
-        max_evidence: Maximum evidence sentences per topic (int)
+        topics_or_brief: List of topic dicts or article brief dict from analyzer
 
     Returns:
-        list[dict]: Prepared topics with:
-            - order: Topic ranking by importance
-            - time_minutes: Duration spent on topic
-            - topic_type: "monologue", "discussion", or "procedural"
-            - topic_hint: Domain hint for topic
-            - evidence: Representative sentences (limited to max_evidence)
+        dict: Article brief with meeting_overview, priority_topics, and topics
     """
-    prepared = []
+    if isinstance(topics_or_brief, dict):
+        topics = sorted(topics_or_brief.get("topics", []), key=lambda topic: topic.get("order", 0))
+        return {
+            "meeting_overview": topics_or_brief.get("meeting_overview", {}),
+            "priority_topics": topics_or_brief.get("priority_topics", []),
+            "topics": topics,
+        }
 
-    for topic in sorted(topics, key=lambda x: x.get("order", 0)):
-        prepared.append({
-            "order": topic.get("order"),
-            "time_minutes": round(topic.get("time_minutes", 0), 1),
-            "topic_type": topic.get("topic_type"),
-            "topic_hint": topic.get("topic_hint"),
-            "evidence": topic.get("evidence", [])[:max_evidence],
-        })
+    topics = sorted(topics_or_brief, key=lambda topic: topic.get("order", 0))
+    total_minutes = round(sum(topic.get("time_minutes", 0) for topic in topics), 1)
+    longest_topics = sorted(
+        topics,
+        key=lambda topic: (-topic.get("time_minutes", 0), topic.get("order", 0))
+    )[:3]
 
-    return prepared
+    for topic in topics:
+        evidence_items = []
+        for item in topic.get("evidence", []):
+            if isinstance(item, dict):
+                evidence_items.append(item)
+            else:
+                evidence_items.append({
+                    "text": item,
+                    "evidence_type": "discussion",
+                })
+        topic["evidence"] = evidence_items
+
+    return {
+        "meeting_overview": {
+            "total_meeting_minutes": total_minutes,
+            "included_topic_count": len(topics),
+            "top_3_longest_topics": [
+                {
+                    "order": topic.get("order"),
+                    "topic_hint": topic.get("topic_hint"),
+                    "time_minutes": round(topic.get("time_minutes", 0), 1),
+                    "time_range": topic.get("time_range"),
+                    "discussion_intensity": topic.get("discussion_intensity"),
+                }
+                for topic in longest_topics
+            ],
+            "procedural_share": round(
+                sum(topic.get("time_minutes", 0) for topic in topics if topic.get("topic_type") == "procedural") / total_minutes,
+                2
+            ) if total_minutes else 0.0,
+            "discussion_share": round(
+                sum(topic.get("time_minutes", 0) for topic in topics if topic.get("topic_type") == "discussion") / total_minutes,
+                2
+            ) if total_minutes else 0.0,
+            "meeting_character": _derive_meeting_character(topics),
+            "dominant_topic_share": round(
+                longest_topics[0].get("time_minutes", 0) / total_minutes,
+                2
+            ) if total_minutes and longest_topics else 0.0,
+        },
+        "priority_topics": [
+            {
+                "order": topic.get("order"),
+                "topic_hint": topic.get("topic_hint"),
+                "time_minutes": round(topic.get("time_minutes", 0), 1),
+                "time_range": topic.get("time_range"),
+                "topic_type": topic.get("topic_type"),
+                "discussion_intensity": topic.get("discussion_intensity"),
+                "topic_summary_hint": topic.get("topic_summary_hint"),
+            }
+            for topic in longest_topics
+        ],
+        "topics": topics,
+    }
 
 
 # =========================
 # LLM PROMPT GENERATION
 # =========================
 
-def build_llm_prompt(prepared_topics):
+def build_llm_prompt(article_brief):
     """
     Build structured prompt for LLM article generation.
 
-    The LLM:
-    - Does NOT know about Jekyll
-    - Does NOT know about sections/structure
-    - Does NOT know about metadata (already generated)
-    - Only writes continuous text
-
     Args:
-        prepared_topics: Prepared topics from prepare_topics_for_llm()
+        article_brief: Prepared article brief from prepare_topics_for_llm()
 
     Returns:
         str: Complete LLM prompt with instructions and data
     """
+    meeting_overview = article_brief.get("meeting_overview", {})
+    priority_topics = article_brief.get("priority_topics", [])
+    topics = article_brief.get("topics", [])
+
     return f"""
 Jsi redaktor regionálního zpravodajství.
-Píšeš věcný a neutrální článek o průběhu jednání zastupitelstva.
+Píšeš čtivý, faktický článek o průběhu jednání zastupitelstva v podobě lokálního zpravodajství.
+
+Writing Objective:
+- napiš středně dlouhý článek bez mezititulků, který čtenáři rychle vysvětlí, co na jednání zabralo nejvíc času a proč to bylo důležité
+- článek má být informačně hutný, konkrétní a dobře plynoucí, ne mechanický přepis bod po bodu
+- otevři text nejdůležitějšími nebo časově dominantními tématy z priority listu, potom plynule pokryj zbytek jednání v chronologii
+
+Reader Value:
+- ukaž konkrétní rozhodnutí, spory, praktické dopady na obyvatele, místa, částky, termíny a opakující se obavy, pokud jsou v podkladech
+- zohledni, kolik času bylo kterému tématu věnováno; dlouhá témata rozveď, rutinní procedurální body stlač do krátké zmínky
+- propojuj související témata a obměňuj rytmus vět, aby text nepůsobil jako jedna odstavecová šablona pro každý JSON bod
 
 Pravidla:
-- piš SOUVISLÝ TEXT, bez nadpisů a sekcí
-- postupuj chronologicky podle pořadí témat
-- zohledni, kolik času bylo jednotlivým tématům věnováno
-- u každého tématu stručně vysvětli, čeho se týkalo
-- zmiň, zda šlo o diskuzi, procedurální bod nebo vystoupení jednotlivce
-- nepřidávej žádná fakta, jména ani čísla, která nejsou v podkladech
-- nic nehodnoť, pouze popisuj
+- nevymýšlej žádná fakta, jména, citace, čísla ani závěry, které nejsou v podkladech
+- nepiš hodnotící nebo komentátorský text; silnější vysvětlující formulace používej jen tehdy, když jsou opřené o evidence
+- vyhni se prázdným větám typu "zastupitelé dále řešili různé body", pokud mají podklady konkrétní obsah
+- když jsou podklady řídké nebo šumové, přiznej stručnost tématu místo doplňování falešné konkrétnosti
+- piš česky
 
-Podklady (seřazeno podle významu):
+Cílová délka:
+- summary: 3 až 4 věty, faktický abstrakt hlavních témat a těžiště jednání
+- article_body: středně dlouhý souvislý text; u několikahodinového jednání míř zhruba na 700 až 1100 slov, ale rutinní body komprimuj a při chudých podkladech raději zkrať
 
-{json.dumps(prepared_topics, ensure_ascii=False, indent=2)}
+Výstup vrať přesně v tomto tvaru:
+SUMMARY:
+3-4 věty
+
+ARTICLE_BODY:
+souvislý text článku bez nadpisů
+
+Přehled jednání:
+{json.dumps(meeting_overview, ensure_ascii=False, indent=2)}
+
+Priority Topics:
+{json.dumps(priority_topics, ensure_ascii=False, indent=2)}
+
+Topics In Reading Order:
+{json.dumps(topics, ensure_ascii=False, indent=2)}
 """.strip()
 
 
@@ -273,18 +366,18 @@ def generate_article(
     print(f"▶ Loading topics from {topics_file}...")
     try:
         topics = json.loads(topics_file.read_text(encoding="utf-8"))
-        if not isinstance(topics, list):
-            raise ValueError("Topics file must contain a JSON array")
+        if not isinstance(topics, (list, dict)):
+            raise ValueError("Topics file must contain a JSON array or article brief object")
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in topics file: {e}") from e
 
     # Build metadata (deterministic, not from LLM)
     print("▶ Building metadata...")
-    metadata = build_meeting_metadata(topics, meeting_date, meeting_number, layout)
-
-    # Prepare topics for LLM
-    print("▶ Preparing topics for LLM...")
     prepared_topics = prepare_topics_for_llm(topics)
+    metadata = build_meeting_metadata(prepared_topics["topics"], meeting_date, meeting_number, layout)
+
+    # Prepare article brief for LLM
+    print("▶ Preparing article brief for LLM...")
 
     # Generate LLM prompt
     print("▶ Generating LLM prompt...")
@@ -306,7 +399,7 @@ def generate_article(
 
     print("\n⚡ Next steps:")
     print("  1. Send LLM prompt to your preferred LLM")
-    print("  2. Copy LLM output to Jekyll draft")
+    print("  2. Copy SUMMARY into front matter and ARTICLE_BODY into Jekyll draft")
     print("  3. Review and publish")
 
     return {

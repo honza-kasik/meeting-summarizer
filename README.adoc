@@ -37,7 +37,7 @@ Output in `output/`:
 output/
 ├── transcript.txt       # Timestamped transcript with speakers
 ├── topics.json          # Full topic analysis
-├── llm_input.json       # Filtered topics for LLM
+├── llm_input.json       # Deterministic article brief for LLM
 ├── llm_prompt.txt       # Structured LLM prompt
 └── jekyll_draft.md      # Jekyll page template
 ----
@@ -47,7 +47,7 @@ output/
 After the pipeline completes:
 
 1. Send `llm_prompt.txt` to your preferred LLM (Claude, GPT, etc.)
-2. Copy LLM response into `jekyll_draft.md`
+2. Copy the `SUMMARY` block into front matter and `ARTICLE_BODY` into `jekyll_draft.md`
 3. Review and publish
 
 == Architecture
@@ -81,7 +81,7 @@ Traditional approach: Feed entire transcript to LLM → unpredictable, subjectiv
 Our approach:
 
 * **Deterministic NLP** extracts topics using statistics (TF-IDF, clustering)
-* **Structured data** ensures repeatability
+* **Structured article brief** ensures repeatability and keeps chronology, priority topics and evidence explicit
 * **LLM focused** on writing, not interpretation
 * **Predictable output** - same input → same topics
 
@@ -118,6 +118,7 @@ Extracts topics from transcript using deterministic NLP pipeline.
 5. Build TF-IDF vectors
 6. Cluster segments into topics using HDBSCAN
 7. Extract topic metadata and representative sentences
+8. Build a richer article brief with meeting overview, priority topics and structured evidence
 
 **Usage**:
 [source,bash]
@@ -136,7 +137,7 @@ Generates LLM prompts and Jekyll templates from analyzed topics.
 **Features**:
 
 * Deterministic metadata (date, duration, meeting number)
-* Structured LLM prompts with topic evidence
+* Structured LLM prompts with meeting overview, priority topics and topic evidence
 * Jekyll-compatible output
 
 **Usage**:
@@ -149,6 +150,54 @@ python article-generator/generate_meeting_article.py \
 ----
 
 **Documentation**: link:article-generator/README.adoc[]
+
+== Richer LLM Brief
+
+`llm_input.json` now contains a deterministic article brief instead of a thin topic list. It includes:
+
+* `meeting_overview`: total duration, number of included topics, longest topics, procedural share, discussion share, meeting character
+* `priority_topics`: the strongest topics for the article lead
+* `topics`: chronological topic entries with timing, speaker signals, keywords, summary hints and structured evidence
+
+Example shape:
+
+[source,json]
+----
+{
+  "meeting_overview": {
+    "total_meeting_minutes": 241.0,
+    "included_topic_count": 6,
+    "meeting_character": "mixed_focus"
+  },
+  "priority_topics": [
+    {
+      "order": 2,
+      "topic_hint": "průběh stavby, místní komunikace",
+      "time_minutes": 74.0
+    }
+  ],
+  "topics": [
+    {
+      "order": 2,
+      "time_minutes": 74.0,
+      "time_range": "36.0–110.0 min",
+      "speaker_count": 6,
+      "dominant_speaker_ratio": 0.38,
+      "keywords": ["stavba", "silnice", "Olomoucká"],
+      "segments_count": 7,
+      "discussion_intensity": "high",
+      "topic_summary_hint": "průběh stavby...; typy zmínek: concern, decision",
+      "evidence": [
+        {
+          "text": "Nejdelší debata se vedla o rekonstrukci Olomoucké ulice...",
+          "time_range": "36.0–41.0 min",
+          "evidence_type": "explanation"
+        }
+      ]
+    }
+  ]
+}
+----
 
 == Installation
 
